@@ -1,0 +1,45 @@
+{
+  "browser": {
+    "channel": "msedge",
+    "headless": false
+  },
+  "intervalMinutes": 15,
+  "activeHours": "08:00-23:30",
+  "riskCooldownMinutes": 60,
+
+  "notify": [
+    { "type": "console" },
+    { "type": "serverchan", "sendkey": "${SERVERCHAN_SENDKEY}" }
+  ],
+
+  "tasks": [
+    {
+      "name": "iPhone 15 Pro 256G",
+      "type": "search",
+      "keyword": "iPhone 15 Pro 256G",
+      "pages": 1,
+      "minPrice": 3000,
+      "maxPrice": 5200,
+      "include": ["256"],
+      "exclude": ["求购", "回收", "租", "壳", "膜", "配件", "模型", "维修", "坏", "有锁", "ID锁"],
+      "alert": {
+        "targetPrice": 4500,
+        "dropPercent": 5,
+        "newListing": true,
+        "newLow": true
+      }
+    },
+    {
+      "name": "盯一个具体的闲鱼链接",
+      "type": "item",
+      "url": "https://www.goofish.com/item?id=替换成商品ID",
+      "intervalMinutes": 30,
+      "enabled": false,
+      "alert": {
+        "targetPrice": 3999,
+        "dropAmount": 100,
+        "statusChange": true
+      }
+    }
+  ]
+}

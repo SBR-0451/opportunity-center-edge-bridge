@@ -1,0 +1,20 @@
+{
+  "name": "xianyu-price-monitor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "本地运行的闲鱼（goofish.com）指定商品 / 关键词价格监控，降价或出现低价新品时推送提醒",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "login": "node src/cli.mjs login",
+    "once": "node src/cli.mjs once",
+    "start": "node src/cli.mjs watch",
+    "test-notify": "node src/cli.mjs test-notify",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

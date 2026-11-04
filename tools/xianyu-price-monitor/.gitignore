@@ -1,0 +1,4 @@
+node_modules/
+# 本地配置里有推送密钥；data/ 里有浏览器登录态和监控记录，都不要提交
+config.json
+data/

@@ -1,7 +1,5 @@
 // 一轮监控：逐个任务抓取 → 过滤 → 对比上一轮 → 推送 → 落盘。
 
-import path from 'node:path';
-import { fetchItem, fetchSearch } from './goofish.mjs';
 import { buildAlertMessage, buildSystemMessage, notifyAll } from './notify.mjs';
 import { ITEM_GONE_RE } from './parse.mjs';
 import { evaluate, filterItems } from './rules.mjs';
@@ -10,8 +8,8 @@ import { fmtPrice, randInt, sleep, timestamp } from './util.mjs';
 const FAILURE_NOTIFY_THRESHOLD = 3;
 
 const BLOCK_TEXT = {
-  risk: '闲鱼触发了风控验证（滑块 / "被挤爆啦"）。已暂停监控，冷却后自动重试。\n如果一直出现：把 browser.headless 设为 false，在弹出的窗口里手动完成验证，并适当调大 intervalMinutes。',
-  login: '闲鱼登录已失效。请在监控目录运行 npm run login 重新扫码登录。',
+  risk: '闲鱼触发了风控验证（滑块 / "被挤爆啦"）。已暂停监控，冷却后自动重试。\n如果一直出现：运行 npm run login，在弹出的窗口里搜一下商品、手动完成验证后按回车，并适当调大 intervalMinutes。',
+  login: '闲鱼登录已失效。请在监控目录运行 npm run login 重新扫码登录（服务器部署时，在电脑上登录后重新复制 data/storage-state.json）。',
 };
 
 /**
@@ -19,18 +17,13 @@ const BLOCK_TEXT = {
  * @param {object} p.config      normalizeConfig 的结果
  * @param {object[]} p.tasks     本轮要跑的任务
  * @param {import('./store.mjs').Store} p.store
- * @param {() => Promise<import('playwright').BrowserContext>} p.getContext
+ * @param {{fetch: (task: object, system: object) => Promise<object>}} p.fetcher  createFetcher 的结果
  * @returns {Promise<{blocked: null|'risk'|'login', results: object[]}>}
  */
-export async function runTasks({ config, tasks, store, getContext, log = console.log, debug = false, now = () => new Date() }) {
+export async function runTasks({ config, tasks, store, fetcher, log = console.log, now = () => new Date() }) {
   const state = store.load();
   const results = [];
   let blocked = null;
-  const fetchOpts = {
-    apis: config.apis,
-    timeoutMs: config.captureTimeoutMs,
-    debugDir: debug ? path.join(config.dataDir, 'debug') : null,
-  };
   const [minDelay, maxDelay] = config.taskDelaySeconds;
 
   for (let i = 0; i < tasks.length; i++) {
@@ -39,8 +32,7 @@ export async function runTasks({ config, tasks, store, getContext, log = console
 
     let res;
     try {
-      const context = await getContext();
-      res = task.type === 'search' ? await fetchSearch(context, task, fetchOpts) : await fetchItem(context, task, fetchOpts);
+      res = await fetcher.fetch(task, state.system);
     } catch (e) {
       res = { kind: 'error', ret: e.message.split('\n')[0] };
     }
@@ -74,8 +66,8 @@ export async function runTasks({ config, tasks, store, getContext, log = console
         task.type === 'search'
           ? `${res.items.length} 条结果，过滤后 ${kept.length} 条，最低 ${lowestItem ? fmtPrice(lowestItem.price) : '-'}`
           : `${kept[0]?.title ? `${kept[0].title.slice(0, 30)} ` : ''}${fmtPrice(kept[0]?.price)}（${kept[0]?.status ?? '-'}）`;
-      log(`[${timestamp(runAt)}] ${task.name}：${summary}，提醒 ${alerts.length} 条`);
-      if (debug && dropped.length) {
+      log(`[${timestamp(runAt)}] ${task.name}：${summary}，提醒 ${alerts.length} 条（${res.via ?? '-'}）`);
+      if (config.debug && dropped.length) {
         for (const d of dropped.slice(0, 20)) log(`    过滤 ${fmtPrice(d.price)} ${d.title.slice(0, 30)} ← ${d.dropReason}`);
       }
       if (alerts.length) await notifyAll(config.notify, buildAlertMessage(task, alerts), log);
@@ -83,7 +75,7 @@ export async function runTasks({ config, tasks, store, getContext, log = console
       continue;
     }
 
-    log(`[${timestamp(runAt)}] ${task.name}：失败（${res.kind}）${res.ret ?? ''}`);
+    log(`[${timestamp(runAt)}] ${task.name}：失败（${res.kind}${res.via ? `，${res.via}` : ''}）${res.ret ?? ''}`);
     results.push({ task: task.name, kind: res.kind, ret: res.ret });
 
     if (res.kind === 'risk' || res.kind === 'login') {

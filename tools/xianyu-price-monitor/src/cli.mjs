@@ -4,11 +4,13 @@
 //   node src/cli.mjs once [--task 名称] [--debug] 立即跑一轮（适合配合系统定时任务）
 //   node src/cli.mjs watch                     常驻运行，按间隔自动监控
 //   node src/cli.mjs test-notify               给所有推送渠道发一条测试消息
-//   node src/cli.mjs import-state <文件>        导入另一台机器 login 生成的 storage-state.json
-// 通用参数：--config <路径>（默认 ./config.json）  --headless / --headed（覆盖配置）
+//   node src/cli.mjs import-state <文件>        导入另一台机器 login 生成的 storage-state.json（部署到服务器用）
+// 通用参数：--config <路径>（默认 ./config.json）  --mode auto|http|browser  --headless / --headed（覆盖配置）
 
+import fs from 'node:fs';
 import path from 'node:path';
 import { loadConfig } from './config.mjs';
+import { createFetcher } from './fetcher.mjs';
 import { importState, interactiveLogin, launchContext } from './goofish.mjs';
 import { buildSystemMessage, notifyAll } from './notify.mjs';
 import { runTasks } from './runner.mjs';
@@ -26,6 +28,7 @@ function parseArgs(argv) {
     else if (a === '--debug') args.debug = true;
     else if (a === '--headless') args.headless = true;
     else if (a === '--headed') args.headless = false;
+    else if (a === '--mode') args.mode = argv[++i];
     else if (a === '-h' || a === '--help') args._.unshift('help');
     else args._.push(a);
   }
@@ -66,12 +69,16 @@ function selectTasks(config, names) {
   return picked;
 }
 
+function makeFetcher(config, ctx) {
+  return createFetcher({ config, getContext: ctx.get, debugDir: config.debug ? path.join(config.dataDir, 'debug') : null });
+}
+
 async function cmdOnce(config, args) {
   const tasks = selectTasks(config, args.task);
   if (!tasks.length) return console.log('没有启用的任务。');
   const ctx = contextProvider(config);
   try {
-    const { blocked } = await runTasks({ config, tasks, store: new Store(config.dataDir), getContext: ctx.get, debug: args.debug });
+    const { blocked } = await runTasks({ config, tasks, store: new Store(config.dataDir), fetcher: makeFetcher(config, ctx) });
     if (blocked) process.exitCode = 2;
   } finally {
     await ctx.close();
@@ -83,6 +90,7 @@ async function cmdWatch(config, args) {
   if (!tasks.length) return console.log('没有启用的任务。');
   const store = new Store(config.dataDir);
   const ctx = contextProvider(config);
+  const fetcher = makeFetcher(config, ctx);
   const nextDue = new Map(tasks.map((t) => [t.name, 0]));
   let cooldownUntil = 0;
   let stopping = false;
@@ -96,7 +104,7 @@ async function cmdWatch(config, args) {
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
 
-  console.log(`开始监控 ${tasks.length} 个任务，默认间隔 ${config.intervalMinutes} 分钟。Ctrl+C 退出。`);
+  console.log(`开始监控 ${tasks.length} 个任务（${config.mode} 模式），默认间隔 ${config.intervalMinutes} 分钟。Ctrl+C 退出。`);
   while (!stopping) {
     const now = Date.now();
     if (!inActiveHours(config.activeHours)) {
@@ -110,13 +118,15 @@ async function cmdWatch(config, args) {
     }
     const due = tasks.filter((t) => nextDue.get(t.name) <= now);
     if (due.length) {
-      const { blocked } = await runTasks({ config, tasks: due, store, getContext: ctx.get, debug: args.debug });
+      const { blocked } = await runTasks({ config, tasks: due, store, fetcher });
       const doneAt = Date.now();
+      // 浏览器只是兜底：http/auto 模式下每轮结束立刻关掉，空闲时只剩 Node 进程
+      if (config.mode !== 'browser') await ctx.close();
       for (const t of due) nextDue.set(t.name, doneAt + jitter((t.intervalMinutes ?? config.intervalMinutes) * 60_000));
       if (blocked) {
         cooldownUntil = doneAt + config.riskCooldownMinutes * 60_000;
         console.log(`[${timestamp()}] ${blocked === 'risk' ? '触发风控' : '登录失效'}，暂停 ${config.riskCooldownMinutes} 分钟。`);
-        if (config.browser.headless) await ctx.close(); // 有界面模式保留窗口，方便手动处理验证/登录
+        if (config.browser.headless) await ctx.close();
       }
     }
     const wake = Math.min(...nextDue.values());
@@ -129,11 +139,11 @@ async function cmdLogin(config) {
     profileDir: config.profileDir,
     channel: config.browser.channel,
     executablePath: config.browser.executablePath,
-    stateFile: path.join(config.dataDir, 'storage-state.json'),
+    stateFile: config.sessionFile,
   });
   if (ok) {
-    console.log('登录成功，登录态已保存在 data/browser-profile。');
-    console.log('（另导出了 data/storage-state.json，用于部署到服务器；它等同于你的登录凭据，不要发给别人。）');
+    console.log(`已保存登录态：${config.sessionFile}（HTTP 模式用）和 data/browser-profile（浏览器模式用）。`);
+    console.log('storage-state.json 等同于你的登录凭据，不要发给别人；部署到服务器时把它复制过去即可。');
   } else {
     console.log('没有检测到登录 Cookie。如果你确实已经登录，可以忽略；否则请重新运行 npm run login。');
   }
@@ -142,8 +152,21 @@ async function cmdLogin(config) {
 async function cmdImportState(config, args) {
   const file = args._[1];
   if (!file) throw new Error('用法：node src/cli.mjs import-state <storage-state.json 路径>');
-  const r = await importState({ profileDir: config.profileDir, ...config.browser, file: path.resolve(file) });
-  console.log(`已导入 ${r.count} 个 Cookie，登录状态：${r.loggedIn ? '已登录' : '未检测到登录 Cookie'}`);
+  const src = path.resolve(file);
+  const state = JSON.parse(fs.readFileSync(src, 'utf8'));
+  if (!Array.isArray(state.cookies) || !state.cookies.length) throw new Error(`${src} 里没有 cookies`);
+  if (src !== config.sessionFile) {
+    fs.mkdirSync(path.dirname(config.sessionFile), { recursive: true });
+    fs.copyFileSync(src, config.sessionFile);
+  }
+  console.log(`已导入 ${state.cookies.length} 个 Cookie 到 ${config.sessionFile}（HTTP 模式可以直接用了）。`);
+  if (config.mode === 'http') return;
+  try {
+    const r = await importState({ profileDir: config.profileDir, ...config.browser, file: src });
+    console.log(`浏览器配置也已导入，登录状态：${r.loggedIn ? '已登录' : '未检测到登录 Cookie'}`);
+  } catch (e) {
+    console.log(`没有导入到浏览器配置（${e.message.split('\n')[0]}）。auto 模式下浏览器兜底将不可用，HTTP 不受影响。`);
+  }
 }
 
 async function cmdTestNotify(config) {
@@ -160,7 +183,7 @@ const HELP = `闲鱼价格监控
   npm run once           立即跑一轮
   npm start              常驻监控
   npm run test-notify    测试推送渠道
-参数：--config <文件>  --task <任务名>（可重复）  --debug  --headless/--headed`;
+参数：--config <文件>  --task <任务名>（可重复）  --mode auto|http|browser  --debug  --headless/--headed`;
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -168,6 +191,11 @@ async function main() {
   if (cmd === 'help') return console.log(HELP);
   const config = loadConfig(args.config);
   if (args.headless != null) config.browser.headless = args.headless;
+  if (args.mode) {
+    if (!['auto', 'http', 'browser'].includes(args.mode)) throw new Error('--mode 只能是 auto / http / browser');
+    config.mode = args.mode;
+  }
+  config.debug = args.debug;
   const commands = { once: cmdOnce, watch: cmdWatch, login: cmdLogin, 'import-state': cmdImportState, 'test-notify': cmdTestNotify };
   if (!commands[cmd]) throw new Error(`未知命令 ${cmd}\n${HELP}`);
   await commands[cmd](config, args);

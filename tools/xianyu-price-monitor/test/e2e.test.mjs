@@ -8,6 +8,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { normalizeConfig } from '../src/config.mjs';
+import { createFetcher } from '../src/fetcher.mjs';
 import { fetchItem, fetchSearch, launchContext } from '../src/goofish.mjs';
 import { runTasks } from '../src/runner.mjs';
 import { Store } from '../src/store.mjs';
@@ -121,6 +122,7 @@ test('完整流程：基线 → 降价/新品 → Webhook 推送 → 风控暂�
 
   const dataDir = tmp();
   const config = normalizeConfig({
+    mode: 'browser',
     dataDir,
     taskDelaySeconds: [0, 0],
     captureTimeoutSeconds: 8,
@@ -132,7 +134,8 @@ test('完整流程：基线 → 降价/新品 → Webhook 推送 → 风控暂�
   }, dataDir, () => {});
   const store = new Store(dataDir);
   const logs = [];
-  const run = () => runTasks({ config, tasks: config.tasks, store, getContext: async () => context, log: (m) => logs.push(m) });
+  const fetcher = createFetcher({ config, getContext: async () => context, log: () => {} });
+  const run = () => runTasks({ config, tasks: config.tasks, store, fetcher, log: (m) => logs.push(m) });
 
   let round = 1;
   await mockGoofish(context, (api) => {

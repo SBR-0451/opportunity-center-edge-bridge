@@ -5,6 +5,9 @@ import { get, toInt } from './util.mjs';
 
 export const SITE = 'https://www.goofish.com';
 
+/** 出现任意一个就说明已登录 */
+export const LOGIN_COOKIES = ['unb', 'tracknick', '_nk_'];
+
 export function itemUrl(itemId) {
   return `${SITE}/item?id=${itemId}`;
 }

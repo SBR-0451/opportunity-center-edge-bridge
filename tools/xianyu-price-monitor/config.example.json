@@ -1,4 +1,5 @@
 {
+  "mode": "auto",
   "browser": {
     "channel": "msedge",
     "headless": false

@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_APIS } from './goofish.mjs';
+import { SORT_NAMES } from './mtop.mjs';
 import { extractItemId, itemUrl } from './parse.mjs';
 import { parseActiveHours } from './util.mjs';
 
 const MIN_INTERVAL_MINUTES = 5;
+const MODES = ['auto', 'http', 'browser'];
 
 /** 把配置里的 "${ENV_NAME}" 替换成环境变量，推送密钥可以不写进文件 */
 export function substituteEnv(value, env = process.env, missing = new Set()) {
@@ -51,10 +53,17 @@ export function normalizeTask(t, index) {
   if (type === 'search') {
     if (!t.keyword) throw new Error(`${where} 缺少 keyword`);
     const pages = Math.min(Math.max(parseInt(t.pages ?? 1, 10) || 1, 1), 5);
+    const sort = t.sort ?? 'default';
+    if (!SORT_NAMES.includes(sort)) throw new Error(`${where}.sort 只能是 ${SORT_NAMES.join(' / ')}`);
+    if (t.searchParams != null && (typeof t.searchParams !== 'object' || Array.isArray(t.searchParams))) {
+      throw new Error(`${where}.searchParams 应为对象`);
+    }
     return {
       ...base,
       keyword: String(t.keyword).trim(),
       pages,
+      sort,
+      searchParams: t.searchParams || null,
       minPrice: optNum(t.minPrice, `${where}.minPrice`),
       maxPrice: optNum(t.maxPrice, `${where}.maxPrice`),
       include: strList(t.include),
@@ -95,10 +104,18 @@ export function normalizeConfig(raw, baseDir = process.cwd(), log = console.warn
     if (t.intervalMinutes != null && t.intervalMinutes < MIN_INTERVAL_MINUTES) t.intervalMinutes = MIN_INTERVAL_MINUTES;
   }
 
+  const mode = cfg.mode ?? 'auto';
+  if (!MODES.includes(mode)) throw new Error(`mode 只能是 ${MODES.join(' / ')}`);
+
   const dataDir = path.resolve(baseDir, cfg.dataDir || './data');
   return {
+    mode,
     dataDir,
     profileDir: path.join(dataDir, 'browser-profile'),
+    sessionFile: path.join(dataDir, 'storage-state.json'),
+    userAgent: cfg.userAgent || null,
+    mtopOrigin: cfg.mtopOrigin || undefined, // 仅供测试指向本地模拟服务
+    debug: false,
     browser: {
       channel: cfg.browser?.channel ?? '',
       headless: cfg.browser?.headless ?? false,

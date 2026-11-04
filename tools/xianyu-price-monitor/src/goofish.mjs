@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { createRequire } from 'node:module';
-import { SITE, classifyRet, parseDetail, parseJsonLoose, parseSearch, searchUrl } from './parse.mjs';
+import { LOGIN_COOKIES, SITE, classifyRet, parseDetail, parseJsonLoose, parseSearch, searchUrl } from './parse.mjs';
 import { randInt, sleep } from './util.mjs';
 
 const require = createRequire(import.meta.url);
@@ -18,8 +18,6 @@ export const DEFAULT_APIS = {
 
 // 搜索结果翻页按钮（尽力而为：找不到就只取第一页）
 const NEXT_PAGE_SELECTORS = ['[class*="search-pagination-arrow-right"]', 'button:has-text("下一页")', 'li[title="下一页"]'];
-
-const LOGIN_COOKIES = ['unb', 'tracknick', '_nk_'];
 
 function loadPlaywright() {
   try {
@@ -183,13 +181,21 @@ export async function fetchItem(context, task, opts = {}) {
   }
 }
 
-/** 打开可见浏览器让用户扫码登录；检测到登录 Cookie 或用户在终端按回车后结束 */
-export async function interactiveLogin({ profileDir, channel, executablePath, stateFile, timeoutMs = 5 * 60_000, log = console.log }) {
+/**
+ * 打开可见浏览器：未登录时等待扫码（检测到登录 Cookie 自动结束）；已登录时等用户处理完滑块验证后按回车。
+ * 结束时把 Cookie 和真实浏览器 UA 导出到 stateFile，供 HTTP 模式使用。
+ */
+export async function interactiveLogin({ profileDir, channel, executablePath, stateFile, timeoutMs = 10 * 60_000, log = console.log }) {
   const context = await launchContext({ profileDir, headless: false, channel, executablePath });
   const page = context.pages()[0] ?? (await context.newPage());
   await page.goto(SITE, { waitUntil: 'domcontentloaded' }).catch(() => {});
-  log('已打开浏览器：点右上角「登录」，用闲鱼或淘宝 App 扫码。');
-  log('检测到登录成功会自动保存并关闭；也可以登录完成后在这里按回车。');
+  const already = await isLoggedIn(context).catch(() => false);
+  if (already) {
+    log('当前已是登录状态。如果监控提示触发了验证，可以在窗口里搜一下商品、完成滑块验证；处理完后在这里按回车保存。');
+  } else {
+    log('已打开浏览器：点右上角「登录」，用闲鱼或淘宝 App 扫码。');
+    log('检测到登录成功会自动保存并关闭；也可以登录完成后在这里按回车。');
+  }
 
   const rl = readline.createInterface({ input: process.stdin });
   let enter = false;
@@ -199,17 +205,19 @@ export async function interactiveLogin({ profileDir, channel, executablePath, st
   const deadline = Date.now() + timeoutMs;
   let ok = false;
   try {
-    while (Date.now() < deadline) {
-      ok = await isLoggedIn(context).catch(() => false);
-      if (ok || enter) break;
-      await sleep(2_000);
-    }
-    if (ok) {
-      await sleep(3_000); // 给页面一点时间写完剩余 Cookie
-      if (stateFile) {
-        fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-        await context.storageState({ path: stateFile });
+    while (Date.now() < deadline && !enter) {
+      if (!already && (await isLoggedIn(context).catch(() => false))) {
+        await sleep(3_000); // 给页面一点时间写完剩余 Cookie
+        break;
       }
+      await sleep(1_000);
+    }
+    ok = await isLoggedIn(context).catch(() => false);
+    if (ok && stateFile) {
+      const userAgent = await page.evaluate(() => navigator.userAgent).catch(() => null);
+      const state = await context.storageState();
+      fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+      fs.writeFileSync(stateFile, JSON.stringify({ ...state, userAgent }, null, 2));
     }
   } finally {
     rl.close();

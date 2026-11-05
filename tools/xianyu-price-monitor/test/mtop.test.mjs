@@ -178,3 +178,18 @@ test('HTTP 模式没有登录信息时报 login，并提示先登录', async () 
   assert.equal(r.kind, 'login');
   assert.match(r.ret, /npm run login/);
 });
+
+test('auto 模式：浏览器兜底启动失败时，按 HTTP 的 login/risk 结果上报', async () => {
+  const config = baseConfig({ mode: 'auto' });
+  const f = createFetcher({
+    config,
+    log: () => {},
+    httpFetch: async () => ({ kind: 'login', ret: '没有登录信息' }),
+    browserFetch: async () => {
+      throw new Error('找不到 playwright，请先运行 npm install');
+    },
+  });
+  const r = await f.fetch(config.tasks[0], {});
+  assert.equal(r.kind, 'login');
+  assert.match(r.ret, /浏览器兜底也失败：找不到 playwright/);
+});

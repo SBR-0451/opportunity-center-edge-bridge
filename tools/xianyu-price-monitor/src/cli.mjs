@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.mjs';
 import { createFetcher } from './fetcher.mjs';
+import { CookieJar } from './mtop.mjs';
 import { importState, interactiveLogin, launchContext } from './goofish.mjs';
 import { buildSystemMessage, notifyAll } from './notify.mjs';
 import { runTasks } from './runner.mjs';
@@ -182,6 +183,9 @@ async function cmdSurvey(config, args) {
   const here = path.dirname(fileURLToPath(import.meta.url));
   const keywordsFile = path.resolve(args.keywords || path.join(here, '..', 'survey-keywords.json'));
   const entries = loadKeywords(keywordsFile);
+  if (config.mode !== 'browser' && !CookieJar.load(config.sessionFile).hasLogin()) {
+    throw new Error('还没有登录闲鱼（没找到 data/storage-state.json 里的登录信息）。先运行 npm run login，扫码成功后再运行 npm run survey。');
+  }
   const pages = Math.min(Math.max(args.pages || 2, 1), 5);
   let outFile;
   let resume = null;

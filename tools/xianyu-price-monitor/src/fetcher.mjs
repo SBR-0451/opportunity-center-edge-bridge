@@ -73,7 +73,13 @@ export function createFetcher({ config, getContext, log = console.log, debugDir 
       if (mode === 'http' || !FALLBACK_KINDS.has(res.kind)) return { ...res, via: 'http' };
 
       log(`    HTTP 未通过（${res.kind}：${res.ret}），改用浏览器重试`);
-      const b = { ...(await viaBrowser(task)), via: 'browser' };
+      let b;
+      try {
+        b = { ...(await viaBrowser(task)), via: 'browser' };
+      } catch (e) {
+        // 浏览器起不来时按 HTTP 的结果（登录失效/风控）上报，让调用方正确停下
+        return { ...res, via: 'http', ret: `${res.ret}；浏览器兜底也失败：${e.message.split('\n')[0]}` };
+      }
       if (b.kind === 'ok') {
         await syncCookiesFromBrowser();
         if (res.kind === 'risk') {

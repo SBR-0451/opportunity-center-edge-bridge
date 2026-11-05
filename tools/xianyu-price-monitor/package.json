@@ -12,7 +12,8 @@
     "once": "node src/cli.mjs once",
     "start": "node src/cli.mjs watch",
     "test-notify": "node src/cli.mjs test-notify",
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test \"test/*.test.mjs\"",
+    "survey": "node src/cli.mjs survey"
   },
   "dependencies": {
     "playwright": "^1.48.0"

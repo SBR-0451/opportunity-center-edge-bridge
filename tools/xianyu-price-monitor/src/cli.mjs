@@ -5,30 +5,39 @@
 //   node src/cli.mjs watch                     常驻运行，按间隔自动监控
 //   node src/cli.mjs test-notify               给所有推送渠道发一条测试消息
 //   node src/cli.mjs import-state <文件>        导入另一台机器 login 生成的 storage-state.json（部署到服务器用）
+//   node src/cli.mjs survey [--pages 2] [--keywords 文件] [--resume 结果文件]   市场普查：批量统计各关键词的在售量、价格、想要数、上新速度
 // 通用参数：--config <路径>（默认 ./config.json）  --mode auto|http|browser  --headless / --headed（覆盖配置）
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.mjs';
 import { createFetcher } from './fetcher.mjs';
 import { importState, interactiveLogin, launchContext } from './goofish.mjs';
 import { buildSystemMessage, notifyAll } from './notify.mjs';
 import { runTasks } from './runner.mjs';
 import { Store } from './store.mjs';
+import { loadKeywords, runSurvey, surveyToCsv } from './survey.mjs';
 import { inActiveHours, jitter, sleep, timestamp } from './util.mjs';
 
 const CONTEXT_MAX_AGE_MS = 6 * 3600_000; // 常驻模式下每 6 小时重启一次浏览器，防止内存越涨越高
 
 function parseArgs(argv) {
-  const args = { _: [], config: 'config.json', task: [], debug: false, headless: null };
+  const args = { _: [], config: 'config.json', configGiven: false, task: [], debug: false, headless: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--config') args.config = argv[++i];
+    if (a === '--config') {
+      args.config = argv[++i];
+      args.configGiven = true;
+    }
     else if (a === '--task') args.task.push(argv[++i]);
     else if (a === '--debug') args.debug = true;
     else if (a === '--headless') args.headless = true;
     else if (a === '--headed') args.headless = false;
     else if (a === '--mode') args.mode = argv[++i];
+    else if (a === '--pages') args.pages = parseInt(argv[++i], 10);
+    else if (a === '--keywords') args.keywords = argv[++i];
+    else if (a === '--resume') args.resume = argv[++i];
     else if (a === '-h' || a === '--help') args._.unshift('help');
     else args._.push(a);
   }
@@ -169,6 +178,42 @@ async function cmdImportState(config, args) {
   }
 }
 
+async function cmdSurvey(config, args) {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const keywordsFile = path.resolve(args.keywords || path.join(here, '..', 'survey-keywords.json'));
+  const entries = loadKeywords(keywordsFile);
+  const pages = Math.min(Math.max(args.pages || 2, 1), 5);
+  let outFile;
+  let resume = null;
+  if (args.resume) {
+    outFile = path.resolve(args.resume);
+    resume = JSON.parse(fs.readFileSync(outFile, 'utf8'));
+  } else {
+    const stamp = timestamp().replace(/[-: ]/g, '').slice(0, 12);
+    outFile = path.join(config.dataDir, 'survey', `survey-${stamp}.json`);
+  }
+  console.log(`普查结果会写到 ${outFile}（每完成一个关键词保存一次，可以随时 Ctrl+C，之后加 --resume 继续）。`);
+  const ctx = contextProvider(config);
+  try {
+    const { blocked, result } = await runSurvey({
+      entries,
+      pages,
+      outFile,
+      resume,
+      fetcher: makeFetcher(config, ctx),
+      delaySeconds: [Math.max(config.taskDelaySeconds[0], 6), Math.max(config.taskDelaySeconds[1], 15)], // 普查请求多，间隔不低于 6–15 秒
+    });
+    const csvFile = outFile.replace(/\.json$/, '.csv');
+    fs.writeFileSync(csvFile, surveyToCsv(result));
+    const ok = result.entries.filter((e) => e.status === 'ok').length;
+    console.log(`\n完成 ${ok}/${entries.length} 个关键词。\n  明细：${outFile}\n  表格：${csvFile}`);
+    if (!blocked) console.log('把 JSON 文件发给分析的人即可（不含卖家昵称和你的登录信息）。');
+    if (blocked) process.exitCode = 2;
+  } finally {
+    await ctx.close();
+  }
+}
+
 async function cmdTestNotify(config) {
   const n = await notifyAll(
     config.notify,
@@ -183,20 +228,26 @@ const HELP = `闲鱼价格监控
   npm run once           立即跑一轮
   npm start              常驻监控
   npm run test-notify    测试推送渠道
+  npm run survey         市场普查（批量统计各卡牌在闲鱼的在售量、价格、想要数）
 参数：--config <文件>  --task <任务名>（可重复）  --mode auto|http|browser  --debug  --headless/--headed`;
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const cmd = args._[0] || 'help';
   if (cmd === 'help') return console.log(HELP);
-  const config = loadConfig(args.config);
+  let configFile = args.config;
+  if (!args.configGiven && ['login', 'survey'].includes(cmd) && !fs.existsSync(configFile) && fs.existsSync('config.example.json')) {
+    console.log('没有找到 config.json，先用 config.example.json 里的设置。');
+    configFile = 'config.example.json';
+  }
+  const config = loadConfig(configFile);
   if (args.headless != null) config.browser.headless = args.headless;
   if (args.mode) {
     if (!['auto', 'http', 'browser'].includes(args.mode)) throw new Error('--mode 只能是 auto / http / browser');
     config.mode = args.mode;
   }
   config.debug = args.debug;
-  const commands = { once: cmdOnce, watch: cmdWatch, login: cmdLogin, 'import-state': cmdImportState, 'test-notify': cmdTestNotify };
+  const commands = { once: cmdOnce, watch: cmdWatch, login: cmdLogin, survey: cmdSurvey, 'import-state': cmdImportState, 'test-notify': cmdTestNotify };
   if (!commands[cmd]) throw new Error(`未知命令 ${cmd}\n${HELP}`);
   await commands[cmd](config, args);
 }

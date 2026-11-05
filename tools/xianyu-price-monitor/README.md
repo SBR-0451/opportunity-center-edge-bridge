@@ -134,6 +134,19 @@ npm start                              # 常驻运行，按间隔自动检查
 - 钉钉机器人如果用"自定义关键词"作为安全设置，关键词填「闲鱼」即可，因为所有消息标题都包含这两个字。
 - `webhook` 渠道推送的 JSON 里有 `alerts` 数组，每一项包含 `itemId`、`price`、`prevPrice`、`reasons`、`url` 等字段，可以接入自己的服务或其他自动化流程。
 
+## 市场普查（一次性统计各卡牌在闲鱼的行情）
+
+```bash
+npm run login     # 没登录过的话先登录
+npm run survey    # 默认用 survey-keywords.json 里约 50 个卡牌关键词，每个搜 2 页
+```
+
+- 每个关键词会统计这些指标：抓到多少条、标题里真正跟卡牌相关的有多少条、卖家数、价格分位（最低 / P25 / 中位 / P75 / 最高）、≥500 元和 ≥5000 元的条数、"想要"人数合计、1 天 / 7 天 / 30 天内新上架的占比，以及价格最高和想要最多的各 5 件商品。
+- 结果写到 `data/survey/survey-日期时间.json`，同目录下还有一份 `.csv` 表格。每完成一个关键词就保存一次。
+- 关键词之间间隔 6–15 秒，一轮大约 10–15 分钟。中途按 Ctrl+C 或者被风控拦下都没关系，之后用 `node src/cli.mjs survey --resume data/survey/survey-xxx.json` 接着跑，已完成的关键词不会重复请求。
+- 想换关键词或卡牌名单，复制一份 `survey-keywords.json` 修改，再用 `--keywords 新文件` 指定。`mustIncludeAny` 和 `exclude` 用来过滤标题里的无关商品，比如"高达卡牌"会搜出高达模型。
+- 结果文件只包含商品的公开信息（标题、价格、想要数、发布时间、地区），不包含卖家昵称和你的登录信息，可以直接发给别人分析。
+
 ## 部署方式
 
 - **Windows 或 Mac 常驻**：在终端里运行 `npm start`。auto 模式下空闲时只有一个 Node 进程。想开机自启可以用 pm2：`pm2 start src/cli.mjs --name xianyu -- watch`。
@@ -179,7 +192,8 @@ TEST_BROWSER_CHANNEL=msedge npm test       # 浏览器部分改用本机 Edge
 ## 文件结构
 
 ```
-src/cli.mjs      命令入口：login / once / watch / test-notify / import-state
+src/cli.mjs      命令入口：login / once / watch / survey / test-notify / import-state
+src/survey.mjs   市场普查：批量统计关键词的在售量、价格分布、想要数和上新速度
 src/fetcher.mjs  按 mode 选择 HTTP 或浏览器，以及 auto 模式的兜底和冷却
 src/mtop.mjs     HTTP 直连：签名、令牌、Cookie 罐、搜索和详情请求
 src/goofish.mjs  浏览器：启动、读取页面接口响应、翻页、扫码登录

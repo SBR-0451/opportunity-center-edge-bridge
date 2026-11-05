@@ -224,6 +224,7 @@ function dumpJson(debugDir, tag, payload) {
 export async function httpFetchSearch(client, task, opts = {}) {
   const api = opts.apis?.search;
   const items = [];
+  let firstPageJson = null;
   for (let p = 1; p <= (task.pages || 1); p++) {
     if (p > 1) await sleep(opts.pageDelayMs ?? randInt(1_500, 4_000));
     const res = await client.call(api, searchPayload(task, p), { referer: searchUrl(task.keyword) });
@@ -232,11 +233,12 @@ export async function httpFetchSearch(client, task, opts = {}) {
       if (p === 1 || res.kind === 'risk' || res.kind === 'login') return res;
       break; // 后面的页失败时保留已拿到的数据
     }
+    if (p === 1) firstPageJson = res.json;
     const pageItems = parseSearch(res.json);
     items.push(...pageItems);
     if (!pageItems.length) break;
   }
-  return { kind: 'ok', items: [...new Map(items.map((it) => [it.itemId, it])).values()] };
+  return { kind: 'ok', items: [...new Map(items.map((it) => [it.itemId, it])).values()], firstPageJson };
 }
 
 export async function httpFetchItem(client, task, opts = {}) {

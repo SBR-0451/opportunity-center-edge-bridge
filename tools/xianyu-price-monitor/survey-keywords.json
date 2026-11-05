@@ -1,0 +1,61 @@
+{
+  "defaults": {
+    "mustIncludeAny": ["卡"],
+    "exclude": ["求购", "账号", "代练", "代肝"]
+  },
+  "keywords": [
+    { "group": "一线（基准）", "game": "宝可梦 PTCG", "keyword": "宝可梦卡牌" },
+    { "group": "一线（基准）", "game": "游戏王", "keyword": "游戏王卡" },
+    { "group": "一线（基准）", "game": "万智牌", "keyword": "万智牌", "mustIncludeAny": ["万智", "mtg"] },
+    { "group": "一线（基准）", "game": "海贼王 OPCG", "keyword": "海贼王卡牌" },
+    { "group": "一线（基准）", "game": "海贼王 OPCG", "keyword": "opcg", "mustIncludeAny": ["opcg", "海贼", "航海", "卡"] },
+
+    { "group": "准一线/新热", "game": "符文战场", "keyword": "符文战场" },
+    { "group": "准一线/新热", "game": "符文战场", "keyword": "符文战场 异画" },
+
+    { "group": "日系二线", "game": "数码宝贝 DTCG", "keyword": "数码宝贝卡牌" },
+    { "group": "日系二线", "game": "高达 GCG", "keyword": "高达卡牌" },
+    { "group": "日系二线", "game": "高达 GCG", "keyword": "gcg 高达", "mustIncludeAny": ["gcg", "卡"] },
+    { "group": "日系二线", "game": "携战之境 UA", "keyword": "携战之境" },
+    { "group": "日系二线", "game": "携战之境 UA", "keyword": "union arena", "mustIncludeAny": ["union", "ua", "卡"] },
+    { "group": "日系二线", "game": "黑白双翼 WS", "keyword": "黑白双翼" },
+    { "group": "日系二线", "game": "黑白双翼 WS", "keyword": "ws卡牌" },
+    { "group": "日系二线", "game": "先导者 VG", "keyword": "先导者卡牌" },
+    { "group": "日系二线", "game": "龙珠 Fusion World", "keyword": "龙珠卡牌 fusion world", "mustIncludeAny": ["fusion", "融合", "卡"] },
+    { "group": "日系二线", "game": "决斗大师", "keyword": "决斗大师 卡" },
+    { "group": "日系二线", "game": "影之诗 进化对决", "keyword": "影之诗 进化对决" },
+    { "group": "日系二线", "game": "战斗之魂", "keyword": "战斗之魂 卡牌" },
+
+    { "group": "日系小众", "game": "WIXOSS", "keyword": "wixoss", "mustIncludeAny": ["wixoss", "卡"] },
+    { "group": "日系小众", "game": "hololive OCG", "keyword": "hololive 卡牌" },
+    { "group": "日系小众", "game": "hololive OCG", "keyword": "ホロカ", "mustIncludeAny": ["ホロカ", "holo", "卡"] },
+    { "group": "日系小众", "game": "Love Live OCG", "keyword": "lovelive 卡牌" },
+    { "group": "日系小众", "game": "Love Live OCG", "keyword": "loveca", "mustIncludeAny": ["loveca", "卡"] },
+    { "group": "日系小众", "game": "Z/X", "keyword": "zx卡牌 ゼクス", "mustIncludeAny": ["ゼクス", "z/x", "zx", "卡"] },
+    { "group": "日系小众", "game": "Lycee", "keyword": "lycee 卡", "mustIncludeAny": ["lycee", "卡"] },
+    { "group": "日系小众", "game": "Reバース", "keyword": "rebirth for you 卡", "mustIncludeAny": ["rebirth", "バース", "卡"] },
+    { "group": "日系小众", "game": "FFTCG", "keyword": "最终幻想 卡牌 fftcg", "mustIncludeAny": ["fftcg", "最终幻想", "卡"] },
+    { "group": "日系小众", "game": "Force of Will", "keyword": "force of will 卡", "mustIncludeAny": ["force of will", "fow", "卡"] },
+
+    { "group": "欧美", "game": "洛卡纳 Lorcana", "keyword": "洛卡纳" },
+    { "group": "欧美", "game": "洛卡纳 Lorcana", "keyword": "lorcana", "mustIncludeAny": ["lorcana", "洛卡纳", "卡"] },
+    { "group": "欧美", "game": "星球大战无限 SWU", "keyword": "星球大战 无限 卡牌" },
+    { "group": "欧美", "game": "Flesh and Blood", "keyword": "flesh and blood 卡", "mustIncludeAny": ["flesh", "fab", "赤魂", "卡"] },
+    { "group": "欧美", "game": "Flesh and Blood", "keyword": "赤魂战纪" },
+    { "group": "欧美", "game": "Sorcery", "keyword": "sorcery contested realm", "mustIncludeAny": ["sorcery", "卡"] },
+    { "group": "欧美", "game": "Altered", "keyword": "altered tcg", "mustIncludeAny": ["altered", "卡"] },
+
+    { "group": "国产", "game": "奥特曼 TCG", "keyword": "奥特曼tcg" },
+    { "group": "国产", "game": "奥特曼卡（收藏）", "keyword": "奥特曼卡 卡游" },
+    { "group": "国产", "game": "小马宝莉卡", "keyword": "小马宝莉卡" },
+    { "group": "国产", "game": "叶罗丽卡", "keyword": "叶罗丽卡" },
+    { "group": "国产", "game": "七圣召唤实体卡", "keyword": "七圣召唤 实体卡" },
+    { "group": "国产", "game": "峡谷争锋（王者荣耀）", "keyword": "峡谷争锋 卡牌" },
+    { "group": "国产", "game": "超英击战（漫威）", "keyword": "超英击战" },
+    { "group": "国产", "game": "正面对决：三国杀", "keyword": "正面对决 三国杀" },
+    { "group": "国产", "game": "一决·三国", "keyword": "一决三国 卡牌" },
+    { "group": "国产", "game": "英雄对决", "keyword": "英雄对决 卡牌" },
+    { "group": "国产", "game": "哪吒卡", "keyword": "哪吒卡 集卡社" },
+    { "group": "国产", "game": "卡卡沃", "keyword": "卡卡沃" }
+  ]
+}

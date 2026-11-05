@@ -140,6 +140,7 @@ export async function fetchSearch(context, task, opts = {}) {
     await dumpDebug(page, opts.debugDir, `${task.name}-p1`, res);
     if (res.kind !== 'ok') return res;
 
+    const firstPageJson = res.json;
     const items = parseSearch(res.json);
     for (let p = 2; p <= (task.pages || 1); p++) {
       const next = await findNextPage(page);
@@ -157,7 +158,7 @@ export async function fetchSearch(context, task, opts = {}) {
       items.push(...parseSearch(res.json));
     }
     const unique = [...new Map(items.map((it) => [it.itemId, it])).values()];
-    return { kind: 'ok', items: unique };
+    return { kind: 'ok', items: unique, firstPageJson };
   } finally {
     await page.close().catch(() => {});
   }

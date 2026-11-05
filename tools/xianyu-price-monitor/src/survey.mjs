@@ -59,6 +59,28 @@ export function summarize(items, now = Date.now()) {
 
 const slim = (i) => ({ itemId: i.itemId, price: i.price, want: i.wantCount, publishTime: i.publishTime, area: i.area, title: i.title });
 
+/** 闲鱼返回的搜索结果总数（resultInfo.searchResControlFields.numFound）；泛关键词会被分词放大 */
+export function totalFound(json) {
+  const n = json?.data?.resultInfo?.searchResControlFields?.numFound;
+  const v = n == null ? null : Number(n);
+  return Number.isFinite(v) ? v : null;
+}
+
+/** 首条商品的原始结构（去掉卖家/用户相关字段），用于核对字段路径 */
+function redactedSample(json) {
+  const row = json?.data?.resultList?.[0];
+  if (!row) return null;
+  const strip = (v) => {
+    if (Array.isArray(v)) return v.map(strip);
+    if (v && typeof v === 'object') {
+      return Object.fromEntries(Object.entries(v).filter(([k]) => !/nick|user|avatar|seller|head/i.test(k)).map(([k, x]) => [k, strip(x)]));
+    }
+    return v;
+  };
+  const text = JSON.stringify(strip(row));
+  return text.length > 6000 ? `${text.slice(0, 6000)}…` : JSON.parse(text);
+}
+
 /** 首页响应里除商品列表以外的字段（可能含总数、分页信息），截断保存，便于事后核对 */
 function metaSnapshot(json) {
   const data = json?.data;
@@ -124,10 +146,12 @@ export async function runSurvey({ entries, fetcher, outFile, pages = 2, delaySec
         uniqueSellers: new Set(relevant.map((it) => it.seller).filter(Boolean)).size,
         topByPrice: [...relevant].sort((a, b) => (b.price ?? 0) - (a.price ?? 0)).slice(0, 5).map(slim),
         topByWant: [...relevant].sort((a, b) => (b.wantCount ?? 0) - (a.wantCount ?? 0)).slice(0, 5).map(slim),
+        totalFound: totalFound(res.firstPageJson),
         meta: metaSnapshot(res.firstPageJson),
+        sampleRow: redactedSample(res.firstPageJson),
       });
       const s = record.relevant;
-      log(`[${timestamp(new Date(at))}] ${entry.keyword}：${res.items.length} 条，相关 ${relevant.length} 条，中位价 ${s.price.median ?? '-'}，想要合计 ${s.want.total}，7 天内上新 ${s.recency.within7d ?? '-'}`);
+      log(`[${timestamp(new Date(at))}] ${entry.keyword}：闲鱼共 ${record.totalFound ?? '?'} 条，抓到 ${res.items.length} 条，相关 ${relevant.length} 条，中位价 ${s.price.median ?? '-'}，想要合计 ${s.want.total}，7 天内上新 ${s.recency.within7d ?? '-'}`);
     } else {
       record.error = res.ret ?? null;
       log(`[${timestamp(new Date(at))}] ${entry.keyword}：失败（${res.kind}）${res.ret ?? ''}`);
@@ -150,7 +174,7 @@ export async function runSurvey({ entries, fetcher, outFile, pages = 2, delaySec
 
 /** 把普查结果整理成一行一个关键词的 CSV（带 BOM，Excel 直接打开） */
 export function surveyToCsv(result) {
-  const head = ['分组', '游戏', '关键词', '状态', '抓到条数', '相关条数', '相关占比', '卖家数', '最低价', 'P25', '中位价', 'P75', '最高价', '≥500元条数', '≥5000元条数', '想要合计', '想要中位数', '有人想要占比', '1天内上新占比', '7天内上新占比', '30天内上新占比'];
+  const head = ['分组', '游戏', '关键词', '状态', '闲鱼总条数', '抓到条数', '相关条数', '相关占比', '卖家数', '最低价', 'P25', '中位价', 'P75', '最高价', '≥500元条数', '≥5000元条数', '想要合计', '想要中位数', '有人想要占比', '1天内上新占比', '7天内上新占比', '30天内上新占比'];
   const cell = (v) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -158,7 +182,7 @@ export function surveyToCsv(result) {
   const rows = result.entries.map((e) => {
     const r = e.relevant;
     return [
-      e.group, e.game, e.keyword, e.status, e.raw?.listings, r?.listings, e.relevantShare, e.uniqueSellers,
+      e.group, e.game, e.keyword, e.status, e.totalFound, e.raw?.listings, r?.listings, e.relevantShare, e.uniqueSellers,
       r?.price.min, r?.price.p25, r?.price.median, r?.price.p75, r?.price.max, r?.price.over500, r?.price.over5000,
       r?.want.total, r?.want.median, r?.want.shareWanted, r?.recency.within1d, r?.recency.within7d, r?.recency.within30d,
     ].map(cell).join(',');

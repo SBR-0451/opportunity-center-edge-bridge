@@ -58,3 +58,11 @@ test('parseDetail 解析价格与状态', () => {
   const sold = parseDetail(detailResponse({ id: '333', title: 'Switch OLED', soldPrice: '1450', itemStatus: 1 }));
   assert.equal(sold.status, 'offline');
 });
+
+test('findWantCount：wantNum 缺失时从卡片文字里找"N人想要"', async () => {
+  const { findWantCount } = await import('../src/parse.mjs');
+  assert.equal(findWantCount({}, { wantNum: '12' }), 12);
+  assert.equal(findWantCount({ fishTags: { r3: { tagList: [{ data: { content: '37人想要' } }] } } }, {}), 37);
+  assert.equal(findWantCount({ fishTags: { r3: { tagList: [{ data: { content: '1.2万人想要' } }] } } }, {}), 12000);
+  assert.equal(findWantCount({ title: '无' }, {}), null);
+});

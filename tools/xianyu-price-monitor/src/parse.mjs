@@ -93,6 +93,30 @@ function collectTags(ex, args) {
   return [...tags].slice(0, 6);
 }
 
+/**
+ * "想要"人数：优先取 clickParam.args.wantNum；没有时在商品卡片的文字里找"N人想要"
+ * （2026-11 的真实普查里 wantNum 全部缺失，所以加了这个兜底）
+ */
+export function findWantCount(ex, args) {
+  const direct = toInt(args?.wantNum ?? ex?.wantNum ?? ex?.wantCnt);
+  if (direct != null) return direct;
+  const seen = new Set();
+  const stack = [ex];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (cur == null || seen.has(cur)) continue;
+    if (typeof cur === 'string') {
+      const m = cur.match(/(\d+(?:\.\d+)?)(万)?\s*人想要/);
+      if (m) return Math.round(parseFloat(m[1]) * (m[2] ? 10000 : 1));
+      continue;
+    }
+    if (typeof cur !== 'object') continue;
+    seen.add(cur);
+    for (const v of Object.values(cur)) stack.push(v);
+  }
+  return null;
+}
+
 /** 搜索接口 mtop.taobao.idlemtopsearch.pc.search → 商品列表 */
 export function parseSearch(json) {
   const list = get(json, ['data', 'resultList'], []);
@@ -110,7 +134,7 @@ export function parseSearch(json) {
       originalPrice: parsePrice(ex.oriPrice),
       area: String(ex.area ?? ''),
       seller: String(ex.userNickName ?? ''),
-      wantCount: toInt(args.wantNum),
+      wantCount: findWantCount(ex, args),
       publishTime: msToIso(args.publishTime),
       tags: collectTags(ex, args),
       picUrl: String(ex.picUrl ?? ''),
